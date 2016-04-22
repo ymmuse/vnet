@@ -75,7 +75,7 @@ func (c *client) loop() {
 	c.cleanupPConn()
 }
 
-func (c *backendConn) newPersistentConn(id uint64) (pc *persistentConn) {
+func (s *backendConn) newPersistentConn(id uint64) (pc *persistentConn) {
 	pc = &persistentConn{
 		recvbuf:  bytes.NewBuffer(make([]byte, 0, backendConnReadBuf)),
 		recvcond: sync.NewCond(&sync.Mutex{}),
@@ -84,8 +84,8 @@ func (c *backendConn) newPersistentConn(id uint64) (pc *persistentConn) {
 		writecond: sync.NewCond(&sync.Mutex{}),
 	}
 
-	c.addPConn(id, pc)
-	go c.pconnWriter(id, pc)
+	s.addPConn(id, pc)
+	go s.pconnWriter(id, pc)
 	return
 }
 

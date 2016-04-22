@@ -10,7 +10,7 @@ vnet can establish virtual connections of client based on a native tcp connectio
 ### Example
 
 The Dial function connects to a server:
-```golang
+```go
 import "vnet"
 
 conn, err := vnet.DialTCP("google.com:80")
@@ -22,7 +22,7 @@ if err != nil {
 ```
 
 The Listen function creates servers:
-```golang
+```go
 import "vnet"
 
 ln, err := vnet.Listen("tcp", ":8080")
@@ -42,6 +42,6 @@ for {
 ### Benchmark
 
 ```shell
-# cd this.repo.dir
-# go test -bench .
+cd this.repo.dir
+go test -bench .
 ```

@@ -16,9 +16,13 @@ var (
 	backendTable         = make(map[string]*client)
 	backendConnTimeTable = make(map[string]int64)
 
-	backendConnErr = errors.New("waiting to connect")
+	errBackendConn = errors.New("waiting to connect")
 )
 
+// DialTCP connects to the address on the named network.
+// Examples:
+// 	DialTCP("12.34.56.78:80")
+// 	DialTCP("tcp", ":80")
 func DialTCP(address string) (conn net.Conn, err error) {
 	var sendtochan bool
 	for try := 0; try < 3; try++ {
@@ -31,7 +35,7 @@ func DialTCP(address string) (conn net.Conn, err error) {
 				sendtochan = true
 				go func() { tryConnToBackendChan <- []byte(address) }()
 			}
-			err = backendConnErr
+			err = errBackendConn
 
 			time.Sleep(time.Millisecond * 200)
 			continue

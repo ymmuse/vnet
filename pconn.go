@@ -25,7 +25,7 @@ func (c *persistentConn) Read(b []byte) (n int, err error) {
 	for {
 		if atomic.LoadInt32(&c.closed) == 1 {
 			err = io.EOF
-			return
+			break
 		}
 
 		c.recvcond.L.Lock()
@@ -39,13 +39,12 @@ func (c *persistentConn) Read(b []byte) (n int, err error) {
 
 		if nn > 0 {
 			c.recvcond.L.Unlock()
-			return
+			break
 		} else if atomic.LoadInt32(&c.closed) == 0 {
 			c.recvcond.Wait()
 		}
 		c.recvcond.L.Unlock()
 	}
-
 	return
 }
 
@@ -120,7 +119,7 @@ func (c *persistentConn) readWritebuf(b []byte) (n int, err error) {
 	for {
 		if atomic.LoadInt32(&c.closed) == 1 {
 			err = io.EOF
-			return
+			break
 		}
 
 		c.writecond.L.Lock()
@@ -134,7 +133,7 @@ func (c *persistentConn) readWritebuf(b []byte) (n int, err error) {
 
 		if nn > 0 {
 			c.writecond.L.Unlock()
-			return
+			break
 		} else if atomic.LoadInt32(&c.closed) == 0 {
 			c.writecond.Wait()
 		}

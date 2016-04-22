@@ -12,6 +12,8 @@ type backendServer struct {
 	newconnChan chan net.Conn
 }
 
+// Listen announces on the local network address laddr.
+// The network lnet must be a stream-oriented network: "tcp", "tcp4", "tcp6",
 func Listen(lnet, laddr string) (net.Listener, error) {
 	var bs *backendServer
 	l, err := net.Listen(lnet, laddr)
