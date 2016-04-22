@@ -41,7 +41,6 @@ func (bs *backendServer) Addr() net.Addr {
 }
 
 func (bs *backendServer) nativeAccept() {
-	defer bs.Close()
 	var tempDelay time.Duration
 	for {
 		conn, err := bs.native.Accept()
@@ -66,7 +65,6 @@ func (bs *backendServer) nativeAccept() {
 			defer c.Close()
 			bc := &backendConn{
 				backend: &backend{
-					srv:        true,
 					native:     c,
 					encoder:    gob.NewEncoder(c),
 					decoder:    gob.NewDecoder(c),

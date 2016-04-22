@@ -21,7 +21,6 @@ type playloadPacket struct {
 type backend struct {
 	native net.Conn
 
-	srv        bool
 	pconnIncID uint64
 	pconnrw    sync.RWMutex
 	pconnTable map[uint64]*persistentConn

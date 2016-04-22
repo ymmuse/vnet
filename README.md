@@ -1,7 +1,10 @@
 
-
 ### What is this?
 vnet can establish virtual connections of client based on a native tcp connection from the front server.  
+
+
+[![Build Status](https://travis-ci.org/ymmuse/vnet.svg?branch=master)](https://travis-ci.org/ymmuse/vnet)
+[![GoDoc](https://godoc.org/github.com/ymmuse/vnet?status.svg)](https://godoc.org/github.com/ymmuse/vnet)
 
 
 ### Example

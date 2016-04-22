@@ -20,17 +20,26 @@ var (
 )
 
 func DialTCP(address string) (conn net.Conn, err error) {
-	backendrw.RLock()
-	bkc, ok := backendTable[address]
-	backendrw.RUnlock()
+	var sendtochan bool
+	for try := 0; try < 3; try++ {
+		backendrw.RLock()
+		bkc, ok := backendTable[address]
+		backendrw.RUnlock()
 
-	if !ok {
-		go func() { tryConnToBackendChan <- []byte(address) }()
-		err = backendConnErr
-		return
+		if !ok {
+			if !sendtochan {
+				sendtochan = true
+				go func() { tryConnToBackendChan <- []byte(address) }()
+			}
+			err = backendConnErr
+
+			time.Sleep(time.Millisecond * 200)
+			continue
+		}
+		err = nil
+		conn = bkc.newPersistentConn()
+		break
 	}
-
-	conn = bkc.newPersistentConn()
 	return
 }
 

@@ -1,12 +1,12 @@
-package main
+package vnet
 
 import (
 	"bytes"
-	"demo/vnet"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -14,20 +14,42 @@ import (
 	"time"
 )
 
+var (
+	srvaddr = "127.0.0.1:12345"
+)
+
 func TestMain(m *testing.M) {
 	rand.Seed(time.Now().UnixNano())
-	// start echo server
-	go main()
+
+	go testsrv()
 
 	time.Sleep(time.Second)
 	os.Exit(m.Run())
+}
+
+func TestRequest(t *testing.T) {
+	doReqeust()
+}
+
+func BenchmarkRequest(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doReqeust()
+	}
+}
+
+func BenchmarkRequestParallel(b *testing.B) {
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			doReqeust()
+		}
+	})
 }
 
 func doReqeust() {
 	var conn net.Conn
 	var err error
 	for i := 0; i < 3; i++ {
-		conn, err = vnet.DialTCP(srvaddr)
+		conn, err = DialTCP(srvaddr)
 		if err != nil {
 			time.Sleep(200 * time.Millisecond)
 			continue
@@ -66,20 +88,34 @@ func doReqeust() {
 	}
 }
 
-func TestRequest(t *testing.T) {
-	doReqeust()
-}
-
-func BenchmarkRequest(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		doReqeust()
+func testsrv() {
+	l, err := Listen("tcp", srvaddr)
+	if err != nil {
+		log.Println("Error listening:", err.Error())
+		os.Exit(1)
 	}
-}
 
-func BenchmarkRequestParallel(b *testing.B) {
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			doReqeust()
+	defer l.Close()
+	log.Println("Listening on " + srvaddr)
+
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			log.Println("Error accepting: ", err.Error())
+			os.Exit(1)
 		}
-	})
+
+		go func(c net.Conn) {
+			defer c.Close()
+			_, err := io.Copy(c, c)
+			switch err {
+			case io.EOF:
+				err = nil
+				return
+			case nil:
+				return
+			}
+			panic(err)
+		}(c)
+	}
 }

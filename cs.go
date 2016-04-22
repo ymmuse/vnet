@@ -49,7 +49,7 @@ func (c *client) loop() {
 
 		pconn := c.getPConn(packet.ID)
 		if pconn == nil {
-			log.Println("never to execute here")
+			log.Println("never execute here")
 			break
 		}
 
@@ -115,12 +115,13 @@ func (s *backendConn) loop(ch chan net.Conn) {
 		}
 
 		pconn := s.getPConn(packet.ID)
-		if packet.Flag == _FlagConnClose && pconn != nil {
-			go func(pconn *persistentConn, id uint64) {
-				s.delPConn(id)
-				pconn.Close()
-			}(pconn, packet.ID)
-
+		if packet.Flag == _FlagConnClose {
+			if pconn != nil {
+				go func(pconn *persistentConn, id uint64) {
+					s.delPConn(id)
+					pconn.Close()
+				}(pconn, packet.ID)
+			}
 			continue
 		}
 
