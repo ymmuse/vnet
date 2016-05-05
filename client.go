@@ -10,24 +10,35 @@ import (
 	"time"
 )
 
+const (
+	backendDialTimeout       = 5
+	backendConnectChanMaxBuf = 1000
+)
+
 var (
 	backendrw            sync.RWMutex
 	tryConnToBackendChan = make(chan []byte, backendConnectChanMaxBuf)
-	backendTable         = make(map[string]*client)
+	clientConnTable      = make(map[string]*clientConn)
 	backendConnTimeTable = make(map[string]int64)
 
-	errBackendConn = errors.New("waiting to connect")
+	errBackendConn      = errors.New("waiting to connect")
+	errNotSupportNetMod = errors.New("not support net mode")
 )
 
-// DialTCP connects to the address on the named network.
+// Dial connects to the address on the named network. Now, The network only support "tcp".
 // Examples:
-// 	DialTCP("12.34.56.78:80")
-// 	DialTCP("tcp", ":80")
-func DialTCP(address string) (conn net.Conn, err error) {
+// 	Dial("tcp", "12.34.56.78:80")
+// 	Dial("tcp", ":80")
+func Dial(net, address string) (conn net.Conn, err error) {
+	if net != "tcp" {
+		err = errNotSupportNetMod
+		return
+	}
+
 	var sendtochan bool
 	for try := 0; try < 3; try++ {
 		backendrw.RLock()
-		bkc, ok := backendTable[address]
+		cc, ok := clientConnTable[address]
 		backendrw.RUnlock()
 
 		if !ok {
@@ -41,7 +52,8 @@ func DialTCP(address string) (conn net.Conn, err error) {
 			continue
 		}
 		err = nil
-		conn = bkc.newPersistentConn()
+		id := cc.newVConnID()
+		conn = cc.newVConn(id)
 		break
 	}
 	return
@@ -59,7 +71,7 @@ func init() {
 			now := time.Now().Unix()
 			ip := string(v)
 			backendrw.RLock()
-			_, ok := backendTable[ip]
+			_, ok := clientConnTable[ip]
 			lastconntime := backendConnTimeTable[ip]
 			backendrw.RUnlock()
 			if ok {
@@ -71,7 +83,7 @@ func init() {
 				b := dialBackend(ip)
 				if b != nil {
 					backendrw.Lock()
-					backendTable[ip] = b
+					clientConnTable[ip] = b
 					backendConnTimeTable[ip] = now
 					backendrw.Unlock()
 				}
@@ -82,7 +94,7 @@ func init() {
 	}()
 }
 
-func dialBackend(address string) (c *client) {
+func dialBackend(address string) (c *clientConn) {
 	log.Println("try to connect to backend", address)
 	conn, err := net.DialTimeout("tcp", address, time.Second*time.Duration(backendDialTimeout))
 	if err != nil {
@@ -90,12 +102,12 @@ func dialBackend(address string) (c *client) {
 		return nil
 	}
 
-	c = &client{
-		backend: &backend{
+	c = &clientConn{
+		_vconn: &_vconn{
 			native:     conn,
 			encoder:    gob.NewEncoder(conn),
 			decoder:    gob.NewDecoder(conn),
-			pconnTable: make(map[uint64]*persistentConn),
+			vconnTable: make(map[uint64]*vconn),
 		},
 	}
 
@@ -110,7 +122,7 @@ func dialBackend(address string) (c *client) {
 		c.loop()
 
 		backendrw.Lock()
-		delete(backendTable, address)
+		delete(clientConnTable, address)
 		backendrw.Unlock()
 
 		log.Printf("backend %s disconnect. perpare reconnect\n", address)
@@ -119,4 +131,52 @@ func dialBackend(address string) (c *client) {
 	}()
 
 	return
+}
+
+type clientConn struct {
+	*_vconn
+}
+
+func (c *clientConn) loop() {
+	go func() {
+		for {
+			if err := c.ping(); err != nil {
+				break
+			}
+			time.Sleep(3 * time.Second)
+		}
+	}()
+
+	for {
+		packet := playloadPacket{}
+		if err := c.decoder.Decode(&packet); err != nil {
+			break
+		}
+
+		vc := c.getVConn(packet.ID)
+		if vc == nil {
+			log.Println("never execute here")
+			break
+		}
+
+		if packet.Flag == _FlagConnClose {
+			go func(vc *vconn, id uint64) {
+				c.delVConn(id)
+				vc.Close()
+			}(vc, packet.ID)
+			continue
+		}
+
+		err := vc.writeRecvbuf(packet.Playload)
+		if err != nil {
+			log.Println("client writeRecvbuf err:", err)
+			go func(vc *vconn, id uint64) {
+				c.closeRemoteVConn(id)
+				c.delVConn(id)
+				vc.Close()
+			}(vc, packet.ID)
+		}
+	}
+
+	c.cleanupVConn()
 }

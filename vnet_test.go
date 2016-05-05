@@ -49,7 +49,7 @@ func doReqeust() {
 	var conn net.Conn
 	var err error
 	for i := 0; i < 3; i++ {
-		conn, err = DialTCP(srvaddr)
+		conn, err = Dial("tcp", srvaddr)
 		if err != nil {
 			time.Sleep(200 * time.Millisecond)
 			continue

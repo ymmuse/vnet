@@ -13,7 +13,7 @@ The Dial function connects to a server:
 ```go
 import "vnet"
 
-conn, err := vnet.DialTCP("google.com:80")
+conn, err := vnet.Dial("tcp", "127.0.0.1:8080")
 if err != nil {
 	// handle error
 }

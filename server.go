@@ -13,7 +13,7 @@ type backendServer struct {
 }
 
 // Listen announces on the local network address laddr.
-// The network lnet must be a stream-oriented network: "tcp", "tcp4", "tcp6",
+// The network lnet must be a stream-oriented network: "tcp",
 func Listen(lnet, laddr string) (net.Listener, error) {
 	var bs *backendServer
 	l, err := net.Listen(lnet, laddr)
@@ -65,15 +65,74 @@ func (bs *backendServer) nativeAccept() {
 
 		go func(c net.Conn) {
 			defer c.Close()
-			bc := &backendConn{
-				backend: &backend{
+			bc := &serverConn{
+				_vconn: &_vconn{
 					native:     c,
 					encoder:    gob.NewEncoder(c),
 					decoder:    gob.NewDecoder(c),
-					pconnTable: make(map[uint64]*persistentConn),
+					vconnTable: make(map[uint64]*vconn),
 				},
 			}
 			bc.loop(bs.newconnChan)
 		}(conn)
 	}
+}
+
+type serverConn struct {
+	*_vconn
+}
+
+func (s *serverConn) loop(ch chan net.Conn) {
+	nowtime := time.Now()
+
+	go func() {
+		for {
+			if time.Now().Sub(nowtime) > time.Second*10 {
+				s.native.Close()
+				break
+			}
+			time.Sleep(3 * time.Second)
+		}
+	}()
+
+	for {
+		packet := playloadPacket{}
+		if err := s.decoder.Decode(&packet); err != nil {
+			log.Println(err)
+			break
+		}
+
+		if packet.Flag == _FlagConnPing {
+			nowtime = time.Now()
+			continue
+		}
+
+		vc := s.getVConn(packet.ID)
+		if packet.Flag == _FlagConnClose {
+			if vc != nil {
+				go func(vc *vconn, id uint64) {
+					s.delVConn(id)
+					vc.Close()
+				}(vc, packet.ID)
+			}
+			continue
+		}
+
+		if vc == nil {
+			vc = s.newVConn(packet.ID)
+			go func(c net.Conn) { ch <- c }(vc)
+		}
+
+		err := vc.writeRecvbuf(packet.Playload)
+		if err != nil {
+			log.Println("serverConn writeRecvbuf err:", err)
+			go func(vc *vconn, id uint64) {
+				s.closeRemoteVConn(id)
+				s.delVConn(id)
+				vc.Close()
+			}(vc, packet.ID)
+		}
+	}
+
+	s.cleanupVConn()
 }
